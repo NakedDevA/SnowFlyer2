@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{A67551A5-54F6-4D10-8F8A-71F4371B1E49}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>SnowRunnerStutterPatcher</RootNamespace>
-    <AssemblyName>SnowRunnerStutterPatcher</AssemblyName>
+    <RootNamespace>SnowFlyer2</RootNamespace>
+    <AssemblyName>SnowFlyer2</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>

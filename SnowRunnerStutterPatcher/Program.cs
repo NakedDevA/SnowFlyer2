@@ -5,7 +5,7 @@ using System.Threading;
 using Reloaded.Memory.Sigscan;
 using Reloaded.Memory.Sources;
 
-namespace SnowRunnerStutterPatcher
+namespace SnowFlyer2
 {
     class Program
     {
@@ -96,14 +96,11 @@ namespace SnowRunnerStutterPatcher
                 Console.Clear();
                 DisableFreeCam();
                 Console.ReadKey();
-
                 return true;
             }
             if (input == 3)
             {
                 Console.Clear();
-                Console.WriteLine("option 3 picked");
-
                 return false;
             }
             else
@@ -188,7 +185,7 @@ namespace SnowRunnerStutterPatcher
                 }
                 catch (Exception)
                 {
-                    throw new Exception(String.Format("Patching in memory failed for {0} \n Try running SnowRunnerStutterPatcher as Administrator", label));
+                    throw new Exception(String.Format("Patching in memory failed for {0} \n Try running again as Administrator", label));
                 }
 
             }
