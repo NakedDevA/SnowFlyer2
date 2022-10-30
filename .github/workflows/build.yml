@@ -1,0 +1,42 @@
+name: Build TTSWPF
+ 
+on: 
+  push:
+    tags:
+      - 'release*'
+jobs:
+  build:
+ 
+    runs-on: windows-latest
+ 
+    steps:
+    - uses: actions/checkout@v1
+      name: Checkout Code
+     
+    - name: Setup MSBuild Path
+      uses: microsoft/setup-msbuild@v1.0.2
+       
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1
+     
+    - name: Restore NuGet Packages
+      run: nuget restore SnowRunnerStutterRemover.sln
+ 
+    - name: Build and Publish Web App
+      run: msbuild SnowRunnerStutterRemover.sln /p:Configuration=Release /p:DeployOnBuild=true /p:Platform=x64
+      
+    - name: Build
+      shell: bash
+      run: |
+          # Pack files
+          # Pack to zip for Windows
+           7z a -tzip "SnowRunnerStutterRemover.zip" "./SnowRunnerStutterStarter\bin\x64\Release\*"
+           7z a -tzip "SnowRunnerStutterPatcher.zip" "./SnowRunnerStutterPatcher\bin\x64\Release\*"
+    - name: Publish
+      uses: softprops/action-gh-release@v1
+      with:
+       files: |
+        SnowRunnerStutterRemover.zip
+        SnowRunnerStutterPatcher.zip
+      env:
+       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
