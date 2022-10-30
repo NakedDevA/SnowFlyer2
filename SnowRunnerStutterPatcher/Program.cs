@@ -88,14 +88,20 @@ namespace SnowFlyer2
             {
                 Console.Clear();
                 EnableFreeCam();
-                Console.ReadKey();
+
+                Console.WriteLine("Press ESC to return to menu");
+                while (Console.ReadKey(true).Key != ConsoleKey.Escape) { }
+
                 return true;
             }
             if (input == 2)
             {
                 Console.Clear();
                 DisableFreeCam();
-                Console.ReadKey();
+
+                Console.WriteLine("Press ESC to return to menu");
+                while (Console.ReadKey(true).Key != ConsoleKey.Escape) { }
+
                 return true;
             }
             if (input == 3)
