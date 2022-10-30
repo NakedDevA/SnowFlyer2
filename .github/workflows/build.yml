@@ -1,0 +1,40 @@
+name: Build TTSWPF
+ 
+on: 
+  push:
+    tags:
+      - 'release*'
+jobs:
+  build:
+ 
+    runs-on: windows-latest
+ 
+    steps:
+    - uses: actions/checkout@v1
+      name: Checkout Code
+     
+    - name: Setup MSBuild Path
+      uses: microsoft/setup-msbuild@v1.0.2
+       
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1
+     
+    - name: Restore NuGet Packages
+      run: nuget restore SnowFlyer2.sln
+ 
+    - name: Build and Publish Web App
+      run: msbuild SnowFlyer2.sln /p:Configuration=Release /p:DeployOnBuild=true /p:Platform=x64
+      
+    - name: Build
+      shell: bash
+      run: |
+          # Pack files
+          # Pack to zip for Windows
+           7z a -tzip "SnowFlyer2.zip" "./SnowFlyer2\bin\x64\Release\*"
+    - name: Publish
+      uses: softprops/action-gh-release@v1
+      with:
+       files: |
+        SnowFlyer2.zip
+      env:
+       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
