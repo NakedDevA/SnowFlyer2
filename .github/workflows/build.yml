@@ -27,14 +27,11 @@ jobs:
       
     - name: Build
       shell: bash
-      run: |
-          # Pack files
-          # Pack to zip for Windows
-           7z a -tzip "SnowFlyer2.zip" "./SnowFlyer2\bin\x64\Release\*"
+      run: 7z a -tzip "SnowFlyer2.zip" "./SnowFlyer2\bin\x64\Release\*"
     - name: Publish
       uses: softprops/action-gh-release@v1
       with:
        files: |
-        SnowFlyer2beta.zip
+        SnowFlyer2.zip
       env:
        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
