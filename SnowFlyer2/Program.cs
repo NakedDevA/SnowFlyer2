@@ -35,19 +35,25 @@ namespace SnowFlyer2
         private static readonly byte[] DevCheckRevertPatch = { 0x80, 0xB8, 0xC8, 0x00, 0x00, 0x00, 0X00 }; //cmp byte ptr [rax+000000C8],01
 
 
-        private static readonly string FlyModeFlagPatternA = "83 3D C7 63 59 02 00 48"; //cmp dword ptr[SnowRunner.exe + 2E24D74],00  48 ON NEXT BYTE FOR UNIQUENESS
-        private static readonly byte[] FlyModeFlagPatchA = { 0x83, 0x3D, 0xC7, 0x63, 0x59, 0x02, 0X01 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],01
+        private static readonly int FlyModeFlagOffset = 0x2E24D74;
+        private static readonly byte[] FlyModeOnPatch = { 0x01 };
+        private static readonly byte[] FlyModeRevertPatch = { 0x00 };
 
-        private static readonly string FlyModeRevertPatternA = "83 3D C7 63 59 02 01 48"; //cmp dword ptr[SnowRunner.exe + 2E24D74],01  48 ON NEXT BYTE FOR UNIQUENESS
-        private static readonly byte[] FlyModeRevertPatchA = { 0x83, 0x3D, 0xC7, 0x63, 0x59, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
+        // The following are intended to patch the flymode *check* rather than change the value, which would be more resilient to game patches.
+        // Not yet working as intended, and the fly mode flag address is trivial to find again so this isn't a priority to fix
+        private static readonly string FlyModeCheckPatternA = "83 3D C7 63 59 02 00 48"; //cmp dword ptr[SnowRunner.exe + 2E24D74],00  48 ON NEXT BYTE FOR UNIQUENESS
+        private static readonly byte[] FlyModeCheckPatchA = { 0x83, 0x3D, 0xC7, 0x63, 0x59, 0x02, 0X01 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],01
+
+        private static readonly string FlyModeCheckRevertPatternA = "83 3D C7 63 59 02 01 48"; //cmp dword ptr[SnowRunner.exe + 2E24D74],01  48 ON NEXT BYTE FOR UNIQUENESS
+        private static readonly byte[] FlyModeCheckRevertPatchA = { 0x83, 0x3D, 0xC7, 0x63, 0x59, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
 
 
-        private static readonly string FlyModeFlagPatternB = "83 3D CD 3E 5C 02 00 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],00    0F    ON NEXT BYTE FOR UNIQUENESS
-        private static readonly byte[] FlyModeFlagPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X01 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],01
+        private static readonly string FlyModeCheckPatternB = "83 3D CD 3E 5C 02 00 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],00    0F    ON NEXT BYTE FOR UNIQUENESS
+        private static readonly byte[] FlyModeCheckPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X01 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],01
 
-        private static readonly byte[] FlyModeRevertPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
-        private static readonly string FlyModeRevertPatternB = "83 3D CD 3E 5C 02 01 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],01    0F    ON NEXT BYTE FOR UNIQUENESS
-
+        private static readonly byte[] FlyModeCheckRevertPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
+        private static readonly string FlyModeCheckRevertPatternB = "83 3D CD 3E 5C 02 01 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],01    0F    ON NEXT BYTE FOR UNIQUENESS
+        
 
         [STAThread]
         static void Main(string[] args)
@@ -129,9 +135,8 @@ namespace SnowFlyer2
             var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
-                SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckPattern, DevCheckPatch, "DevFlag");
-                SearchAndApplyPatch(snowRunnerProcess, scanner, FlyModeFlagPatternA, FlyModeFlagPatchA, "Fly1");
-                SearchAndApplyPatch(snowRunnerProcess, scanner, FlyModeFlagPatternB, FlyModeFlagPatchB, "Fly2");
+                SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckPattern, DevCheckPatch, "DevMode");
+                ForceApplyPatchAtOffset(snowRunnerProcess, FlyModeFlagOffset, FlyModeOnPatch, "FlyMode");
 
                 Console.BackgroundColor = ConsoleColor.Blue;
                 Console.ForegroundColor = ConsoleColor.White;
@@ -159,9 +164,8 @@ namespace SnowFlyer2
 
             try
             {
-                SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckRevertPattern, DevCheckRevertPatch, "DevFlag");
-                SearchAndApplyPatch(snowRunnerProcess, scanner, FlyModeRevertPatternA, FlyModeRevertPatchA, "Fly1");
-                SearchAndApplyPatch(snowRunnerProcess, scanner, FlyModeRevertPatternB, FlyModeRevertPatchB, "Fly2");
+                SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckRevertPattern, DevCheckRevertPatch, "DevMode");
+                ForceApplyPatchAtOffset(snowRunnerProcess, FlyModeFlagOffset, FlyModeRevertPatch, "FlyMode");
 
                 Console.BackgroundColor = ConsoleColor.Blue;
                 Console.ForegroundColor = ConsoleColor.White;
@@ -180,8 +184,7 @@ namespace SnowFlyer2
             Console.WriteLine("Searching for {0} patch location", label);
             if (offset.Found)
             {
-                Console.WriteLine(offset.Offset);
-                Console.WriteLine("Found {0} patch location. Patching game in memory...", label);
+                Console.WriteLine("Found {0} patch location at {1:X}. Patching game in memory...", label, offset.Offset);
                 try
                 {
                     var memory = new ExternalMemory(snowRunnerProcess);
@@ -198,6 +201,24 @@ namespace SnowFlyer2
             else
             {
                 throw new Exception(String.Format("Could not find patch location for {0}", label));
+            }
+        }
+
+
+        private static void ForceApplyPatchAtOffset(Process snowRunnerProcess, int offset, byte[] patchBytes, String label)
+        {
+            Console.WriteLine("Using known {0} patch location {1:X}. Patching game in memory...", label, offset);
+            try
+            {
+                var memory = new ExternalMemory(snowRunnerProcess);
+                var baseAddress = snowRunnerProcess.MainModule.BaseAddress + offset;
+                memory.WriteRaw(baseAddress, patchBytes);
+
+                Console.WriteLine("Patch in memory successful!");
+            }
+            catch (Exception)
+            {
+                throw new Exception(String.Format("Patching in memory failed for {0} \n Try running again as Administrator", label));
             }
         }
     }
