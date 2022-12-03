@@ -2,6 +2,8 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using ConsoleHotKey;
+using System.Windows.Forms;
 using Reloaded.Memory.Sigscan;
 using Reloaded.Memory.Sources;
 
@@ -60,19 +62,21 @@ namespace SnowFlyer2
 
         private static readonly byte[] FlyModeCheckRevertPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
         private static readonly string FlyModeCheckRevertPatternB = "83 3D CD 3E 5C 02 01 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],01    0F    ON NEXT BYTE FOR UNIQUENESS
-        
+
+        private static bool IsActive = false;
 
         [STAThread]
         static void Main(string[] args)
         {
+            Process snowRunnerProcess = attachToSnowRunnerProcess();
             bool showMenu = true;
             while (showMenu)
             {
-                showMenu = MainMenu();
+                showMenu = MainMenu(snowRunnerProcess);
             }
 
         }
-        private static bool MainMenu()
+        private static bool MainMenu(Process snowRunnerProcess)
         {
             string logo = @"   _____                     ______ _                   ___  
   / ____|                   |  ____| |                 |__ \ 
@@ -84,61 +88,19 @@ namespace SnowFlyer2
                                       |___/                  ";
             Console.Clear();
 
-
             Console.WriteLine(logo);
 
-            Console.WriteLine("\n \nPlease select an option:");
-            Console.WriteLine("1) enable fly mode");
-            Console.WriteLine("2) disable fly mode");
-            Console.WriteLine("3) exit");
-            Console.Write("# ");
 
-            int input;
-            int.TryParse(Console.ReadKey().KeyChar.ToString(), out input);
+            HotKeyManager.RegisterHotKey(Keys.F1, KeyModifiers.Control);
+            HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
 
-            Console.WriteLine();
-            if (input == 1)
-            {
-                Console.Clear();
-                EnableFreeCam();
-
-                Console.WriteLine("Press ESC to return to menu");
-                while (Console.ReadKey(true).Key != ConsoleKey.Escape) { }
-
-                return true;
-            }
-            if (input == 2)
-            {
-                Console.Clear();
-                DisableFreeCam();
-
-                Console.WriteLine("Press ESC to return to menu");
-                while (Console.ReadKey(true).Key != ConsoleKey.Escape) { }
-
-                return true;
-            }
-            if (input == 3)
-            {
-                Console.Clear();
-                return false;
-            }
-            else
-            {
-                return true;
-            }
+            Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
+            Console.ReadKey();
+            return true;
         }
 
-        private static void EnableFreeCam()
+        private static void EnableFreeCam(Process snowRunnerProcess)
         {
-            Console.WriteLine("Looking for SnowRunner.exe");
-            var p = Process.GetProcessesByName("SnowRunner");
-            while (p.Length == 0)
-            {
-                Console.WriteLine("Waiting for SnowRunner.exe");
-                Thread.Sleep(1000);
-                p = Process.GetProcessesByName("SnowRunner");
-            }
-            var snowRunnerProcess = p.First();
             var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
@@ -150,6 +112,7 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n FreeCam Enabled!");
                 Console.ResetColor();
+                IsActive = true;
             }
             catch (Exception ex)
             {
@@ -157,19 +120,9 @@ namespace SnowFlyer2
             }
         }
 
-        private static void DisableFreeCam()
+        private static void DisableFreeCam(Process snowRunnerProcess)
         {
-            Console.WriteLine("Looking for SnowRunner.exe");
-            var p = Process.GetProcessesByName("SnowRunner");
-            while (p.Length == 0)
-            {
-                Console.WriteLine("Waiting for SnowRunner.exe");
-                Thread.Sleep(1000);
-                p = Process.GetProcessesByName("SnowRunner");
-            }
-            var snowRunnerProcess = p.First();
             var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
-
             try
             {
                 SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckRevertPattern, DevCheckRevertPatch, "DevMode");
@@ -180,11 +133,26 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n FreeCam Disabled!");
                 Console.ResetColor();
+                IsActive = false;
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
             }
+        }
+
+        private static Process attachToSnowRunnerProcess()
+        {
+            Console.WriteLine("Looking for SnowRunner.exe");
+            var p = Process.GetProcessesByName("SnowRunner");
+            while (p.Length == 0)
+            {
+                Console.WriteLine("Waiting for SnowRunner.exe");
+                Thread.Sleep(1000);
+                p = Process.GetProcessesByName("SnowRunner");
+            }
+            var snowRunnerProcess = p.First();
+            return snowRunnerProcess;
         }
 
         private static void SearchAndApplyPatch(Process snowRunnerProcess, Scanner scanner, String searchPattern, byte[] patchBytes, String label)
@@ -229,6 +197,23 @@ namespace SnowFlyer2
             {
                 throw new Exception(String.Format("Patching in memory failed for {0} \n Try running again as Administrator", label));
             }
+        }
+
+        private static void Hotkey_Pressed(object sender2, HotKeyEventArgs e2, Process snowRunnerProcess)
+        {
+            Console.Clear();
+            if (IsActive)
+            {
+                DisableFreeCam(snowRunnerProcess);
+            }
+            else
+            {
+                // Try disabling in case someone quits while in fly mode and then can't revert
+                DisableFreeCam(snowRunnerProcess);
+                EnableFreeCam(snowRunnerProcess);
+            }
+            Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
+
         }
     }
 }
