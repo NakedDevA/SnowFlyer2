@@ -110,6 +110,7 @@ namespace SnowFlyer2
             HotKeyManager.RegisterHotKey(Keys.F2, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F4, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F5, KeyModifiers.Control);
             HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
 
             Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
@@ -290,6 +291,28 @@ namespace SnowFlyer2
             }
         }
 
+
+        private static void CycleTOD(Process snowRunnerProcess)
+        {
+            try
+            {
+                var memory = new ExternalMemory(snowRunnerProcess);
+                var valueAddress = GetTODMemoryAddress(snowRunnerProcess, memory);
+
+                var now = 0f;
+                while(now < 24f)
+                {
+                    memory.Write<float>(valueAddress, now);
+                    Thread.Sleep(10);
+                    now = now + 0.03f;
+                }
+            }
+            catch (Exception)
+            {
+                throw new Exception(String.Format("eek"));
+            }
+        }
+
         private static IntPtr GetTODMemoryAddress(Process snowRunnerProcess, ExternalMemory memory)
         {
             var baseAddress = snowRunnerProcess.MainModule.BaseAddress + TODPointer;
@@ -345,6 +368,12 @@ namespace SnowFlyer2
                         SetCurrentTOD(snowRunnerProcess, 12f);
                         break;
                     }
+                case Keys.F5:
+                    {
+                        Console.WriteLine("Cycling TOD");
+                        CycleTOD(snowRunnerProcess);
+                        break;
+                    }
                 default:
                     {
 
@@ -357,18 +386,3 @@ namespace SnowFlyer2
         }
     }
 }
-
-/*
-
-//force the value to be 12 (41 40 00 00 float?)
-7FF7EE420000 - mov[r13 + 00000138],41400000
-
-
-41 C7 85 38 01 00 00 00 00 40 41
-
-    //original:
-    SnowRunner.exe + A866C1 - 
-    F3 41 0F11 95 38010000 - movss[r13 + 00000138],xmm2
-
-    F3 41 0F 11 95 38 01 00 00
-*/
