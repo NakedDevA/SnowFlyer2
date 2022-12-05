@@ -6,6 +6,8 @@ using ConsoleHotKey;
 using System.Windows.Forms;
 using Reloaded.Memory.Sigscan;
 using Reloaded.Memory.Sources;
+using Reloaded.Memory.Pointers;
+using System.Runtime.ExceptionServices;
 
 namespace SnowFlyer2
 {
@@ -248,6 +250,72 @@ namespace SnowFlyer2
             }
         }
 
+
+        private static void ReadCurrentTOD(Process snowRunnerProcess)
+        {
+            try
+            {
+                 var offset = 0x138;/*
+                 var memory = new ExternalMemory(snowRunnerProcess);
+                 IntPtr pointer = IntPtr.Add(snowRunnerProcess.MainModule.BaseAddress, 0x02E6EAA8);
+
+                 //var baseAddress = snowRunnerProcess.MainModule.BaseAddress + offset;
+                 float todBytes = 0;
+                 memory.SafeRead<float>(pointer, out todBytes);
+                 Console.WriteLine("current TOD: {0}", todBytes.ToString());
+
+
+                 byte[] raw;
+                 memory.ReadRaw(pointer, out raw,11 );
+                 Console.WriteLine("current RAW TOD: {0}{1}{2}{3}", raw[0], raw[1], raw[2], raw[3]);
+                 Console.WriteLine(string.Join(", ", raw));
+                */
+
+                var memory = new ExternalMemory(snowRunnerProcess);
+                var baseAddress = snowRunnerProcess.MainModule.BaseAddress + 0x02E5C9D8;
+                byte[] readBytes;
+                memory.ReadRaw(baseAddress, out readBytes, 8);
+                Console.WriteLine("first ptr:");
+                Console.WriteLine(string.Join(", ", readBytes));
+
+                byte[] readIntBytes;
+                memory.ReadRaw(baseAddress, out readIntBytes, 4);
+                Console.WriteLine("as int ptr:");
+                Console.WriteLine(string.Join(", ", readIntBytes));
+
+                
+                Console.WriteLine("as int64");
+                var addressInPointer = BitConverter.ToInt64(readBytes, 0);
+                Console.WriteLine(addressInPointer);
+
+                Console.WriteLine("as int32");
+                var y = BitConverter.ToInt32(readBytes, 0);
+                Console.WriteLine(y);
+
+                Console.WriteLine("as Uint32");
+                var z = BitConverter.ToUInt32(readBytes, 0);
+                Console.WriteLine(z);
+
+                Console.WriteLine("as Uint64");
+                var zz = BitConverter.ToUInt64(readBytes, 0);
+                Console.WriteLine(zz);
+
+                //This gives us 1E19DACD310, which is the right address pre-offset!!
+                // So check the value there:
+                Int64 valueAddress = addressInPointer + 0x138;
+                float outBytes;
+                memory.Read<float>((IntPtr)valueAddress, out outBytes);
+                Console.WriteLine("outbytes:");
+                Console.WriteLine(outBytes.ToString());
+
+
+            }
+            catch (Exception)
+            {
+                throw new Exception(String.Format("eek"));
+            }
+        }
+
         private static void Hotkey_Pressed(object sender2, HotKeyEventArgs e2, Process snowRunnerProcess)
         {
             Console.Clear();
@@ -273,6 +341,8 @@ namespace SnowFlyer2
                     {
                         Console.WriteLine("Disabling timer...");
                         StopTODTicker(snowRunnerProcess);
+
+                        ReadCurrentTOD(snowRunnerProcess);
                         break;
                     }
                 case Keys.F3:
