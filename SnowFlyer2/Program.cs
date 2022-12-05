@@ -45,7 +45,7 @@ namespace SnowFlyer2
         private static readonly string DevCheckRevertPatternB = "80 B8 C8 00 00 00 01 0F 85"; //cmp byte ptr [rax+000000C8],01   0F 85 ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] DevCheckRevertPatchB = { 0x80, 0xB8, 0xC8, 0x00, 0x00, 0x00, 0X00 }; //cmp byte ptr [rax+000000C8],00
 
-
+        // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button.
         private static readonly int FlyModeFlagOffset = 0x2E24D74;
         private static readonly byte[] FlyModeOnPatch = { 0x01 };
         private static readonly byte[] FlyModeRevertPatch = { 0x00 };
@@ -65,12 +65,16 @@ namespace SnowFlyer2
         private static readonly byte[] FlyModeCheckRevertPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
         private static readonly string FlyModeCheckRevertPatternB = "83 3D CD 3E 5C 02 01 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],01    0F    ON NEXT BYTE FOR UNIQUENESS
 
-        // TOD    
+        // Time Of Day    
         private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 38 01 00 00"; //movss[r13 + 00000138],xmm2   optional F3 0F ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] TODTickDisablePatch = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 }; // 9 NOPS, prevent timer from advancing
 
         private static readonly string TODTickRevertPattern = "90 90 90 90 90 90 90 90 90 F3 0F 10 05 86 32 AA 01"; //our NOPS, plus next entire instructions since there are definitely dupes of NOP 
         private static readonly byte[] TODTickRevertPatch = { 0xF3, 0x41, 0x0F, 0x11, 0x95, 0x38, 0x01, 0x00, 0x00 }; //original ticker code
+
+        // To find the TOD pointer - use Cheat Engine with above AOBs, which should be editing one address (r13+ 000000138). Find updated pointer from this address.
+        private static readonly int TODOffset = 0x138;
+        private static readonly int TODPointer = 0x02E5C9D8;
 
 
 
@@ -105,6 +109,7 @@ namespace SnowFlyer2
             HotKeyManager.RegisterHotKey(Keys.F1, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F2, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F4, KeyModifiers.Control);
             HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
 
             Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
@@ -269,11 +274,24 @@ namespace SnowFlyer2
             }
         }
 
+
+        private static void SetCurrentTOD(Process snowRunnerProcess, float newTOD)
+        {
+            try
+            {
+                var memory = new ExternalMemory(snowRunnerProcess);
+                var valueAddress = GetTODMemoryAddress(snowRunnerProcess, memory);
+
+                memory.Write<float>(valueAddress, newTOD);
+            }
+            catch (Exception)
+            {
+                throw new Exception(String.Format("eek"));
+            }
+        }
+
         private static IntPtr GetTODMemoryAddress(Process snowRunnerProcess, ExternalMemory memory)
         {
-            const int TODOffset = 0x138;
-            const int TODPointer = 0x02E5C9D8;
-
             var baseAddress = snowRunnerProcess.MainModule.BaseAddress + TODPointer;
             byte[] readBytes;
             memory.ReadRaw(baseAddress, out readBytes, 8);
@@ -319,6 +337,12 @@ namespace SnowFlyer2
                     {
                         Console.WriteLine("Resuming timer...");
                         ResumeTODTicker(snowRunnerProcess);
+                        break;
+                    }
+                case Keys.F4:
+                    {
+                        Console.WriteLine("Forcing TOD to X");
+                        SetCurrentTOD(snowRunnerProcess, 12f);
                         break;
                     }
                 default:
