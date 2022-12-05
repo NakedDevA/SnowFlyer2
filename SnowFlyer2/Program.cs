@@ -255,22 +255,11 @@ namespace SnowFlyer2
         {
             try
             {
-                const int TODOffset = 0x138;
-                const int TODPointer = 0x02E5C9D8;
-
                 var memory = new ExternalMemory(snowRunnerProcess);
-                var baseAddress = snowRunnerProcess.MainModule.BaseAddress + TODPointer;
-                byte[] readBytes;
-                memory.ReadRaw(baseAddress, out readBytes, 8);
-
-                var addressInPointer = BitConverter.ToInt64(readBytes, 0);
-
-                //This gives us 1E19DACD310, which is the right address pre-offset!!
-                // So check the value there:
-                Int64 valueAddress = addressInPointer + TODOffset;
+                var valueAddress = GetTODMemoryAddress(snowRunnerProcess, memory);
 
                 float outBytes;
-                memory.Read<float>((IntPtr)valueAddress, out outBytes);
+                memory.Read<float>(valueAddress, out outBytes);
                 Console.WriteLine("outbytes:");
                 Console.WriteLine(outBytes.ToString());
             }
@@ -278,6 +267,23 @@ namespace SnowFlyer2
             {
                 throw new Exception(String.Format("eek"));
             }
+        }
+
+        private static IntPtr GetTODMemoryAddress(Process snowRunnerProcess, ExternalMemory memory)
+        {
+            const int TODOffset = 0x138;
+            const int TODPointer = 0x02E5C9D8;
+
+            var baseAddress = snowRunnerProcess.MainModule.BaseAddress + TODPointer;
+            byte[] readBytes;
+            memory.ReadRaw(baseAddress, out readBytes, 8);
+
+            var addressInPointer = BitConverter.ToInt64(readBytes, 0);
+
+            //This gives us 1E19DACD310, which is the right address pre-offset!!
+            // So check the value there:
+            var valueAddress = addressInPointer + TODOffset;
+            return (IntPtr)valueAddress;
         }
 
         private static void Hotkey_Pressed(object sender2, HotKeyEventArgs e2, Process snowRunnerProcess)
