@@ -63,6 +63,15 @@ namespace SnowFlyer2
         private static readonly byte[] FlyModeCheckRevertPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
         private static readonly string FlyModeCheckRevertPatternB = "83 3D CD 3E 5C 02 01 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],01    0F    ON NEXT BYTE FOR UNIQUENESS
 
+        // TOD    
+        private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 38 01 00 00"; //movss[r13 + 00000138],xmm2   optional F3 0F ON NEXT BYTE FOR UNIQUENESS
+        private static readonly byte[] TODTickDisablePatch = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 }; // 9 NOPS, prevent timer from advancing
+
+        private static readonly string TODTickRevertPattern = "90 90 90 90 90 90 90 90 90 F3 0F 10 05 86 32 AA 01"; //our NOPS, plus next entire instructions since there are definitely dupes of NOP 
+        private static readonly byte[] TODTickRevertPatch = { 0xF3, 0x41, 0x0F, 0x11, 0x95, 0x38, 0x01, 0x00, 0x00 }; //original ticker code
+
+
+
         private static bool IsActive = false;
 
         [STAThread]
@@ -92,11 +101,51 @@ namespace SnowFlyer2
 
 
             HotKeyManager.RegisterHotKey(Keys.F1, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F2, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
             HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
 
             Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
             Console.ReadKey();
             return true;
+        }
+
+        private static void StopTODTicker(Process snowRunnerProcess)
+        {
+            var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
+            try
+            {
+                SearchAndApplyPatch(snowRunnerProcess, scanner, TODTickDisablePattern, TODTickDisablePatch, "TODTick");
+
+                Console.BackgroundColor = ConsoleColor.Blue;
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine("\n\n Timer Stopped!");
+                Console.ResetColor();
+                IsActive = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private static void ResumeTODTicker(Process snowRunnerProcess)
+        {
+            var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
+            try
+            {
+                SearchAndApplyPatch(snowRunnerProcess, scanner, TODTickRevertPattern, TODTickRevertPatch, "TODTick");
+
+                Console.BackgroundColor = ConsoleColor.Blue;
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine("\n\n Timer Resumed!");
+                Console.ResetColor();
+                IsActive = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
         }
 
         private static void EnableFreeCam(Process snowRunnerProcess)
@@ -202,18 +251,60 @@ namespace SnowFlyer2
         private static void Hotkey_Pressed(object sender2, HotKeyEventArgs e2, Process snowRunnerProcess)
         {
             Console.Clear();
-            if (IsActive)
+
+            switch (e2.Key)
             {
-                DisableFreeCam(snowRunnerProcess);
-            }
-            else
-            {
-                // Try disabling in case someone quits while in fly mode and then can't revert
-                DisableFreeCam(snowRunnerProcess);
-                EnableFreeCam(snowRunnerProcess);
+                case Keys.F1:
+                    {
+                        Console.WriteLine("Toggling freecam...");
+                        if (IsActive)
+                        {
+                            DisableFreeCam(snowRunnerProcess);
+                        }
+                        else
+                        {
+                            // Try disabling in case someone quits while in fly mode and then can't revert
+                            DisableFreeCam(snowRunnerProcess);
+                            EnableFreeCam(snowRunnerProcess);
+                        }
+                        break;
+                    }
+                case Keys.F2:
+                    {
+                        Console.WriteLine("Disabling timer...");
+                        StopTODTicker(snowRunnerProcess);
+                        break;
+                    }
+                case Keys.F3:
+                    {
+                        Console.WriteLine("Resuming timer...");
+                        ResumeTODTicker(snowRunnerProcess);
+                        break;
+                    }
+                default:
+                    {
+
+                        Console.WriteLine("Unknown hotkey!");
+                        break;
+                    }
             }
             Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
 
         }
     }
 }
+
+/*
+
+//force the value to be 12 (41 40 00 00 float?)
+7FF7EE420000 - mov[r13 + 00000138],41400000
+
+
+41 C7 85 38 01 00 00 00 00 40 41
+
+    //original:
+    SnowRunner.exe + A866C1 - 
+    F3 41 0F11 95 38010000 - movss[r13 + 00000138],xmm2
+
+    F3 41 0F 11 95 38 01 00 00
+*/
