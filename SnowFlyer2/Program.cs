@@ -8,6 +8,7 @@ using Reloaded.Memory.Sigscan;
 using Reloaded.Memory.Sources;
 using Reloaded.Memory.Pointers;
 using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
 
 namespace SnowFlyer2
 {
@@ -58,7 +59,6 @@ namespace SnowFlyer2
         private static readonly string FlyModeCheckRevertPatternA = "83 3D C7 63 59 02 01 48"; //cmp dword ptr[SnowRunner.exe + 2E24D74],01  48 ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] FlyModeCheckRevertPatchA = { 0x83, 0x3D, 0xC7, 0x63, 0x59, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
 
-
         private static readonly string FlyModeCheckPatternB = "83 3D CD 3E 5C 02 00 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],00    0F    ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] FlyModeCheckPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X01 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],01
 
@@ -78,7 +78,8 @@ namespace SnowFlyer2
 
 
 
-        private static bool IsActive = false;
+        private static bool IsFreeCamActive = false;
+        private static bool ShouldLoopTime = false;
 
         [STAThread]
         static void Main(string[] args)
@@ -111,6 +112,7 @@ namespace SnowFlyer2
             HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F4, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F5, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F6, KeyModifiers.Control);
             HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
 
             Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
@@ -129,7 +131,7 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n Timer Stopped!");
                 Console.ResetColor();
-                IsActive = true;
+                IsFreeCamActive = true;
             }
             catch (Exception ex)
             {
@@ -148,7 +150,7 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n Timer Resumed!");
                 Console.ResetColor();
-                IsActive = true;
+                IsFreeCamActive = true;
             }
             catch (Exception ex)
             {
@@ -169,7 +171,7 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n FreeCam Enabled!");
                 Console.ResetColor();
-                IsActive = true;
+                IsFreeCamActive = true;
             }
             catch (Exception ex)
             {
@@ -190,7 +192,7 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n FreeCam Disabled!");
                 Console.ResetColor();
-                IsActive = false;
+                IsFreeCamActive = false;
             }
             catch (Exception ex)
             {
@@ -296,20 +298,31 @@ namespace SnowFlyer2
         {
             try
             {
-                var memory = new ExternalMemory(snowRunnerProcess);
-                var valueAddress = GetTODMemoryAddress(snowRunnerProcess, memory);
+                Task worker = Task.Run(() => LoopTimeThread(snowRunnerProcess));
+                // Wait for task to complete.
+                Console.WriteLine("Waiting for background task to complete.");
+               // worker.Wait();
 
-                var now = 0f;
-                while(now < 24f)
-                {
-                    memory.Write<float>(valueAddress, now);
-                    Thread.Sleep(10);
-                    now = now + 0.03f;
-                }
+
             }
             catch (Exception)
             {
                 throw new Exception(String.Format("eek"));
+            }
+        }
+
+        static void LoopTimeThread(Process snowRunnerProcess)
+        {
+            var memory = new ExternalMemory(snowRunnerProcess);
+            var valueAddress = GetTODMemoryAddress(snowRunnerProcess, memory);
+
+            var now = 0f;
+            ShouldLoopTime = true;
+            while (now < 24f && ShouldLoopTime)
+            {
+                memory.Write<float>(valueAddress, now);
+                Thread.Sleep(10);
+                now = now + 0.03f;
             }
         }
 
@@ -336,7 +349,7 @@ namespace SnowFlyer2
                 case Keys.F1:
                     {
                         Console.WriteLine("Toggling freecam...");
-                        if (IsActive)
+                        if (IsFreeCamActive)
                         {
                             DisableFreeCam(snowRunnerProcess);
                         }
@@ -372,6 +385,12 @@ namespace SnowFlyer2
                     {
                         Console.WriteLine("Cycling TOD");
                         CycleTOD(snowRunnerProcess);
+                        break;
+                    }
+                case Keys.F6:
+                    {
+                        Console.WriteLine("Stopping TOD cycle");
+                        ShouldLoopTime = false;
                         break;
                     }
                 default:
