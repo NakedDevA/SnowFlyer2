@@ -80,6 +80,7 @@ namespace SnowFlyer2
 
         private static bool IsFreeCamActive = false;
         private static bool ShouldLoopTime = false;
+        private static bool IsTimePassing = true;
 
         [STAThread]
         static void Main(string[] args)
@@ -110,12 +111,9 @@ namespace SnowFlyer2
             HotKeyManager.RegisterHotKey(Keys.F1, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F2, KeyModifiers.Control);
             HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F4, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F5, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F6, KeyModifiers.Control);
             HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
 
-            Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
+            DisplayHotkeyInstructions();
             Console.ReadKey();
             return true;
         }
@@ -132,7 +130,11 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n Timer Stopped!");
                 Console.ResetColor();
-                IsFreeCamActive = true;
+                IsTimePassing = false;
+
+                float currentTime = GetCurrentTOD(snowRunnerProcess);
+
+                Console.WriteLine("Current time is:{0}h", currentTime.ToString("0.00"));
             }
             catch (Exception ex)
             {
@@ -152,7 +154,7 @@ namespace SnowFlyer2
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("\n\n Timer Resumed!");
                 Console.ResetColor();
-                IsFreeCamActive = true;
+                IsTimePassing = true;
             }
             catch (Exception ex)
             {
@@ -261,7 +263,7 @@ namespace SnowFlyer2
         }
 
 
-        private static float ReadCurrentTOD(Process snowRunnerProcess)
+        private static float GetCurrentTOD(Process snowRunnerProcess)
         {
             try
             {
@@ -270,12 +272,11 @@ namespace SnowFlyer2
 
                 float outBytes;
                 memory.Read<float>(valueAddress, out outBytes);
-                Console.WriteLine("Current time is:{0}h", outBytes.ToString());
                 return outBytes;
             }
             catch (Exception)
             {
-                throw new Exception(String.Format("eek"));
+                throw new Exception(String.Format("Could not read current time from memory\n Try running again as Administrator"));
             }
         }
 
@@ -302,11 +303,22 @@ namespace SnowFlyer2
             {
                 // Spawn thread for time loop so we can interrupt it via hotkey
                 Task worker = Task.Run(() => LoopTimeThread(snowRunnerProcess));
+                ConsoleLogWithColour("Timelapse running!", ConsoleColor.White, ConsoleColor.Red);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                throw new Exception(String.Format("eek"));
+                throw new Exception(String.Format("Could not start timelapse, {0}", ex.Message));
             }
+        }
+
+        private static void StopCyclingTOD(Process snowRunnerProcess)
+        {
+            ShouldLoopTime = false;
+
+            ConsoleLogWithColour("Timelapse stopped", ConsoleColor.White, ConsoleColor.Red);
+            float currentTime = GetCurrentTOD(snowRunnerProcess);
+
+            Console.WriteLine("Current time is:{0}h", currentTime.ToString("0.00"));
         }
 
         static void LoopTimeThread(Process snowRunnerProcess)
@@ -314,7 +326,7 @@ namespace SnowFlyer2
             var memory = new ExternalMemory(snowRunnerProcess);
             var valueAddress = GetTODMemoryAddress(snowRunnerProcess, memory);
 
-            var now = ReadCurrentTOD(snowRunnerProcess);
+            var now = GetCurrentTOD(snowRunnerProcess);
             ShouldLoopTime = true;
             while (ShouldLoopTime)
             {
@@ -337,6 +349,22 @@ namespace SnowFlyer2
             // So check the value there:
             var valueAddress = addressInPointer + TODOffset;
             return (IntPtr)valueAddress;
+        }
+
+        private static void DisplayHotkeyInstructions()
+        {
+            Console.WriteLine("\n \nHotkeys: \n");
+            Console.WriteLine("Ctrl + F1: \t Toggle free camera mode\n");
+            Console.WriteLine("Ctrl + F2: \t Toggle in-game time\n");
+            Console.WriteLine("Ctrl + F3: \t Toggle timelapse\n");
+        }
+
+        private static void ConsoleLogWithColour(string content, ConsoleColor foreground, ConsoleColor background )
+        {
+            Console.BackgroundColor = background;
+            Console.ForegroundColor = foreground;
+            Console.WriteLine(content);
+            Console.ResetColor();
         }
 
         private static void Hotkey_Pressed(object sender2, HotKeyEventArgs e2, Process snowRunnerProcess)
@@ -362,49 +390,44 @@ namespace SnowFlyer2
                     }
                 case Keys.F2:
                     {
-                        Console.WriteLine("Disabling timer...");
-                        StopTODTicker(snowRunnerProcess);
-
-                        ReadCurrentTOD(snowRunnerProcess);
+                        // Toggle the game's regular passing of time
+                        if (IsTimePassing)
+                        {
+                            Console.WriteLine("Disabling timer...");
+                            StopTODTicker(snowRunnerProcess);
+                        }
+                        else
+                        {
+                            // Try disabling in case someone quits while time is stopped and then can't revert
+                            Console.WriteLine("Check timer was running...");
+                            StopTODTicker(snowRunnerProcess);
+                            Console.WriteLine("Resuming timer...");
+                            ResumeTODTicker(snowRunnerProcess);
+                        }
                         break;
                     }
                 case Keys.F3:
                     {
-                        Console.WriteLine("Resuming timer...");
-                        ResumeTODTicker(snowRunnerProcess);
-                        break;
-                    }
-                case Keys.F4:
-                    {
                         // Toggle TOD cycle
                         if (ShouldLoopTime)
                         {
-                            Console.WriteLine("Stopping time cycle");
-                            ShouldLoopTime = false;
+                            Console.WriteLine("Stopping timelapse");
+                            StopCyclingTOD(snowRunnerProcess);
                         }
                         else
                         {
-
-                            Console.WriteLine("Cycling TOD");
+                            Console.WriteLine("Starting timelapse");
                             CycleTOD(snowRunnerProcess);
                         }
                         break;
                     }
-                case Keys.F6:
-                    {
-                        Console.WriteLine("Stopping TOD cycle");
-                        ShouldLoopTime = false;
-                        break;
-                    }
                 default:
                     {
-
                         Console.WriteLine("Unknown hotkey!");
                         break;
                     }
             }
-            Console.WriteLine("\n \nPress Ctrl + F1 to toggle free camera mode!");
-
+            DisplayHotkeyInstructions();
         }
     }
 }
