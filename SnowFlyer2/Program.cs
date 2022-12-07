@@ -122,6 +122,7 @@ namespace SnowFlyer2
 
         private static void StopTODTicker(Process snowRunnerProcess)
         {
+            ShouldLoopTime = false;
             var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
@@ -141,6 +142,7 @@ namespace SnowFlyer2
 
         private static void ResumeTODTicker(Process snowRunnerProcess)
         {
+            ShouldLoopTime = false;
             var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
@@ -259,7 +261,7 @@ namespace SnowFlyer2
         }
 
 
-        private static void ReadCurrentTOD(Process snowRunnerProcess)
+        private static float ReadCurrentTOD(Process snowRunnerProcess)
         {
             try
             {
@@ -268,8 +270,8 @@ namespace SnowFlyer2
 
                 float outBytes;
                 memory.Read<float>(valueAddress, out outBytes);
-                Console.WriteLine("outbytes:");
-                Console.WriteLine(outBytes.ToString());
+                Console.WriteLine("Current time is:{0}h", outBytes.ToString());
+                return outBytes;
             }
             catch (Exception)
             {
@@ -298,12 +300,8 @@ namespace SnowFlyer2
         {
             try
             {
+                // Spawn thread for time loop so we can interrupt it via hotkey
                 Task worker = Task.Run(() => LoopTimeThread(snowRunnerProcess));
-                // Wait for task to complete.
-                Console.WriteLine("Waiting for background task to complete.");
-               // worker.Wait();
-
-
             }
             catch (Exception)
             {
@@ -316,13 +314,14 @@ namespace SnowFlyer2
             var memory = new ExternalMemory(snowRunnerProcess);
             var valueAddress = GetTODMemoryAddress(snowRunnerProcess, memory);
 
-            var now = 0f;
+            var now = ReadCurrentTOD(snowRunnerProcess);
             ShouldLoopTime = true;
-            while (now < 24f && ShouldLoopTime)
+            while (ShouldLoopTime)
             {
                 memory.Write<float>(valueAddress, now);
                 Thread.Sleep(10);
                 now = now + 0.03f;
+                if (now > 24f) now = now - 24f; 
             }
         }
 
@@ -377,14 +376,18 @@ namespace SnowFlyer2
                     }
                 case Keys.F4:
                     {
-                        Console.WriteLine("Forcing TOD to X");
-                        SetCurrentTOD(snowRunnerProcess, 12f);
-                        break;
-                    }
-                case Keys.F5:
-                    {
-                        Console.WriteLine("Cycling TOD");
-                        CycleTOD(snowRunnerProcess);
+                        // Toggle TOD cycle
+                        if (ShouldLoopTime)
+                        {
+                            Console.WriteLine("Stopping time cycle");
+                            ShouldLoopTime = false;
+                        }
+                        else
+                        {
+
+                            Console.WriteLine("Cycling TOD");
+                            CycleTOD(snowRunnerProcess);
+                        }
                         break;
                     }
                 case Keys.F6:
