@@ -47,7 +47,7 @@ namespace SnowFlyer2
         private static readonly byte[] DevCheckRevertPatchB = { 0x80, 0xB8, 0xC8, 0x00, 0x00, 0x00, 0X00 }; //cmp byte ptr [rax+000000C8],00
 
         // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button.
-        private static readonly int FlyModeFlagOffset = 0x2E24D74;
+        private static readonly int FlyModeFlagOffset = 0x2E25D74;
         private static readonly byte[] FlyModeOnPatch = { 0x01 };
         private static readonly byte[] FlyModeRevertPatch = { 0x00 };
 
@@ -69,12 +69,12 @@ namespace SnowFlyer2
         private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 38 01 00 00"; //movss[r13 + 00000138],xmm2   optional F3 0F ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] TODTickDisablePatch = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 }; // 9 NOPS, prevent timer from advancing
 
-        private static readonly string TODTickRevertPattern = "90 90 90 90 90 90 90 90 90 F3 0F 10 05 86 32 AA 01"; //our NOPS, plus next entire instructions since there are definitely dupes of NOP 
+        private static readonly string TODTickRevertPattern = "90 90 90 90 90 90 90 90 90 F3 0F 10 05"; //our NOPS, plus next instruction since there are definitely dupes of NOP 
         private static readonly byte[] TODTickRevertPatch = { 0xF3, 0x41, 0x0F, 0x11, 0x95, 0x38, 0x01, 0x00, 0x00 }; //original ticker code
 
         // To find the TOD pointer - use Cheat Engine with above AOBs, which should be editing one address (r13+ 000000138). Find updated pointer from this address.
         private static readonly int TODOffset = 0x138;
-        private static readonly int TODPointer = 0x02E5C9D8;
+        private static readonly int TODPointer = 0x02E2F138;
 
 
 
