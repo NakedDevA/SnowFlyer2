@@ -9,9 +9,11 @@ using Reloaded.Memory.Sources;
 using Reloaded.Memory.Pointers;
 using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
+using System.Numerics;
 
 namespace SnowFlyer2
 {
+
     class Program
     {
         /// <summary>
@@ -76,7 +78,8 @@ namespace SnowFlyer2
         private static readonly int TODOffset = 0x138;
         private static readonly int TODPointer = 0x02E2F138;
 
-
+        // Player location
+        private static string PatternPlayerCoords = "0F B6 5C 24 70 84 DB 75 43";
 
         private static bool IsFreeCamActive = false;
         private static bool ShouldLoopTime = false;
@@ -86,6 +89,11 @@ namespace SnowFlyer2
         static void Main(string[] args)
         {
             Process snowRunnerProcess = attachToSnowRunnerProcess();
+            HotKeyManager.RegisterHotKey(Keys.F1, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F2, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(Keys.F4, KeyModifiers.Control);
+            HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
             bool showMenu = true;
             while (showMenu)
             {
@@ -108,12 +116,10 @@ namespace SnowFlyer2
             Console.WriteLine(logo);
 
 
-            HotKeyManager.RegisterHotKey(Keys.F1, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F2, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
-            HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
 
             DisplayHotkeyInstructions();
+            
+            //Prevent app from closing
             Console.ReadKey();
             return true;
         }
@@ -161,6 +167,82 @@ namespace SnowFlyer2
                 Console.WriteLine(ex.Message);
             }
         }
+
+
+        private static void GetPlayerCoords(Process snowRunnerProcess)
+        {
+            var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
+            var coordsPtr = scanner.CompiledFindPattern(PatternPlayerCoords);
+
+            IntPtr PlayerCoordsBasePtr = IntPtr.Zero;
+            int[] PlayerCoordsOffsets = { 0x28, 0x18, 0x1A8 };
+            var snowRunnerBase = snowRunnerProcess.MainModule.BaseAddress;
+
+            StructPointerDescription<Vector3> PlayerCoord;
+            if (coordsPtr.Found)
+            {
+                var memory = new ExternalMemory(snowRunnerProcess);
+                PlayerCoordsBasePtr = ReadOffsetFromCallToLeaSingleton(memory, snowRunnerBase + coordsPtr.Offset + GetOpcodeLengthOfPattern(PatternPlayerCoords));
+                if (PlayerCoordsBasePtr == IntPtr.Zero)
+                    return;
+                PlayerCoord = new StructPointerDescription<Vector3>(memory, PlayerCoordsBasePtr, PlayerCoordsOffsets);
+
+                var playerVec = PlayerCoord.Read();
+                Console.WriteLine($"Coord: {playerVec.X:F2} {playerVec.Y:F2} {playerVec.Z:F2}");
+            }
+        }
+
+        public static IntPtr ReadOffsetFromOpcode(IMemory memory, IntPtr opcodeBegin, int offsetUntilAddress)
+        {
+            var opcodeOffset = memory.Read<int>(opcodeBegin + offsetUntilAddress);
+            var effectiveAddress = opcodeBegin + offsetUntilAddress + opcodeOffset;
+            return effectiveAddress + sizeof(int);
+        }
+        public static IntPtr ReadOffsetFromCallToLeaSingleton(IMemory memory, IntPtr opcodeBegin) //qqtas opcodebegin is first byte after our player pattern
+        {
+            var callToGetPtr = ReadOffsetFromOpcode(memory, opcodeBegin, 1);//call offset 1
+            callToGetPtr = ReadOffsetFromOpcode(memory, callToGetPtr, 3); //lea offset 3
+            return callToGetPtr;
+        }
+
+        public static IntPtr GetLastPtrOfPtrChain(IMemory memory, IntPtr baseAddress, params int[] offsets)
+        {
+            if (baseAddress == IntPtr.Zero)
+            {
+                return baseAddress;
+            }
+            if (offsets.Length == 0)
+            {
+                return baseAddress;
+            }
+
+            var basePtr = memory.Read<IntPtr>(baseAddress);
+            if (basePtr == IntPtr.Zero)
+            {
+                return default;
+            }
+            for (var i = 0; i < offsets.Length - 1; i++)
+            {
+                basePtr = memory.Read<IntPtr>(basePtr + offsets[i]);
+                if (basePtr == IntPtr.Zero)
+                {
+                    return default;
+                }
+            }
+            if (basePtr == IntPtr.Zero)
+            {
+                return default;
+            }
+            //return basePtr + offsets[^1];
+            return basePtr + offsets[offsets.Length-1];
+        }
+
+        private static int GetOpcodeLengthOfPattern(string pattern)
+        {
+            //2 characters represent a byte
+            return pattern.Replace(" ", "").Length / 2;
+        }
+
 
         private static void EnableFreeCam(Process snowRunnerProcess)
         {
@@ -333,7 +415,7 @@ namespace SnowFlyer2
                 memory.Write<float>(valueAddress, now);
                 Thread.Sleep(10);
                 now = now + 0.03f;
-                if (now > 24f) now = now - 24f; 
+                if (now > 24f) now = now - 24f;
             }
         }
 
@@ -357,9 +439,10 @@ namespace SnowFlyer2
             Console.WriteLine("Ctrl + F1: \t Toggle free camera mode\n");
             Console.WriteLine("Ctrl + F2: \t Toggle in-game time\n");
             Console.WriteLine("Ctrl + F3: \t Toggle timelapse\n");
+            Console.WriteLine("Ctrl + F4: \t Get player location\n");
         }
 
-        private static void ConsoleLogWithColour(string content, ConsoleColor foreground, ConsoleColor background )
+        private static void ConsoleLogWithColour(string content, ConsoleColor foreground, ConsoleColor background)
         {
             Console.BackgroundColor = background;
             Console.ForegroundColor = foreground;
@@ -421,6 +504,11 @@ namespace SnowFlyer2
                         }
                         break;
                     }
+                case Keys.F4:
+                    {
+                        GetPlayerCoords(snowRunnerProcess);
+                        break;
+                    }
                 default:
                     {
                         Console.WriteLine("Unknown hotkey!");
@@ -429,5 +517,44 @@ namespace SnowFlyer2
             }
             DisplayHotkeyInstructions();
         }
+
+
+
+
+        internal class StructPointerDescription<T>
+            where T : struct
+        {
+            private readonly IMemory _memory;
+            private readonly IntPtr _basePtr;
+            private readonly int[] _offsets;
+            private T _value;
+            public StructPointerDescription(IMemory memory, IntPtr basePtr, params int[] offsets)
+            {
+                _memory = memory;
+                _basePtr = basePtr;
+                _offsets = offsets;
+            }
+
+            public T Read()
+            {
+                var ptr = GetLastPtrOfPtrChain(_memory, _basePtr, _offsets);
+                if (ptr == IntPtr.Zero)
+                    return default;
+                //Console.WriteLine($"Player pointer is: {ptr}");
+                _memory.Read<T>(ptr, out _value, false);
+                return _value;
+            }
+
+            public void Write(T value)
+            {
+                var ptr = GetLastPtrOfPtrChain(_memory, _basePtr, _offsets);
+                if (ptr == IntPtr.Zero)
+                    return;
+                _memory.Write<T>(ptr, value, false);
+            }
+        }
+
+
+
     }
 }
