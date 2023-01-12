@@ -74,7 +74,7 @@ namespace SnowFlyer2
 
         // To find the TOD pointer - use Cheat Engine with above AOBs, which should be editing one address (r13+ 000000138). Find updated pointer from this address.
         private static readonly int TODOffset = 0x138;
-        private static readonly int TODPointer = 0x02E2F138;
+        private static readonly int TODPointer = 0x02E8F9E8;
 
 
 
