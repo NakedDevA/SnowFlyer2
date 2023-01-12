@@ -47,7 +47,7 @@ namespace SnowFlyer2
         private static readonly byte[] DevCheckRevertPatchB = { 0x80, 0xB8, 0xC8, 0x00, 0x00, 0x00, 0X00 }; //cmp byte ptr [rax+000000C8],00
 
         // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button.
-        private static readonly int FlyModeFlagOffset = 0x2E25D74;
+        private static readonly int FlyModeFlagOffset = 0x2E86604;
         private static readonly byte[] FlyModeOnPatch = { 0x01 };
         private static readonly byte[] FlyModeRevertPatch = { 0x00 };
 
