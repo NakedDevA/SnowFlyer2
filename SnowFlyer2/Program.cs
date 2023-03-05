@@ -48,8 +48,10 @@ namespace SnowFlyer2
         private static readonly string DevCheckRevertPatternB = "80 B8 C8 00 00 00 01 0F 85"; //cmp byte ptr [rax+000000C8],01   0F 85 ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] DevCheckRevertPatchB = { 0x80, 0xB8, 0xC8, 0x00, 0x00, 0x00, 0X00 }; //cmp byte ptr [rax+000000C8],00
 
-        // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button.
-        private static readonly int FlyModeFlagOffset = 0x2E25D74;
+        // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button and scanning for a 4 byte boolean.
+        // There will be two - one is the highlight state of the free camera button, the other is the actual freecam state.
+        // NB- this mod can't be tested on mod maps, since those already have devmode flag set they will become unable to use freecam when we swizzle the devmode check
+        private static readonly int FlyModeFlagOffset = 0x2E4497C;
         private static readonly byte[] FlyModeOnPatch = { 0x01 };
         private static readonly byte[] FlyModeRevertPatch = { 0x00 };
 
@@ -74,9 +76,13 @@ namespace SnowFlyer2
         private static readonly string TODTickRevertPattern = "90 90 90 90 90 90 90 90 90 F3 0F 10 05"; //our NOPS, plus next instruction since there are definitely dupes of NOP 
         private static readonly byte[] TODTickRevertPatch = { 0xF3, 0x41, 0x0F, 0x11, 0x95, 0x38, 0x01, 0x00, 0x00 }; //original ticker code
 
-        // To find the TOD pointer - use Cheat Engine with above AOBs, which should be editing one address (r13+ 000000138). Find updated pointer from this address.
+        // To find the TOD pointer - use Cheat Engine with above TODTickDisablePattern, which should be editing one address (r13+ 000000138).
+        // Memory view-> search for AOB, go to same address in the ASM section at top, ->'find out what addresses this instruction accesses'
+        // Add it to addresslist, ->generate pointermap for it with offsets ending in 138 as below
+        // ->'Pointerscan for this address' using the pointermap. Should be 3 top-level pointers available.
+        // Can do this twice and 'compare results with other saved pointermaps', but so far the 3 top level ones are always valid and there's no need.
         private static readonly int TODOffset = 0x138;
-        private static readonly int TODPointer = 0x02E2F138;
+        private static readonly int TODPointer = 0x02E4DC00;
 
         // Player location
         private static string PatternPlayerCoords = "0F B6 5C 24 70 84 DB 75 43";
