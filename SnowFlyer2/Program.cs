@@ -51,7 +51,7 @@ namespace SnowFlyer2
         // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button and scanning for a 4 byte boolean.
         // There will be two - one is the highlight state of the free camera button, the other is the actual freecam state.
         // NB- this mod can't be tested on mod maps, since those already have devmode flag set they will become unable to use freecam when we swizzle the devmode check
-        private static readonly int FlyModeFlagOffset = 0x2E5E66C;
+        private static readonly int FlyModeFlagOffset = 0x2E7A16C;
         private static readonly byte[] FlyModeOnPatch = { 0x01 };
         private static readonly byte[] FlyModeRevertPatch = { 0x00 };
 
