@@ -2,7 +2,7 @@
 
 A minimal trainer to enable free camera mode in Snowrunner
 
-Tested on version 23 (Season 9, Mastodon update),  Steam and Epic versions.
+Tested on version 24.0 (Season 10, British Colombia release),  Steam and Epic versions.
 
 ## Usage
 
