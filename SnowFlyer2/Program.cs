@@ -82,7 +82,7 @@ namespace SnowFlyer2
         // ->'Pointerscan for this address' using the pointermap. Should be 3 top-level pointers available.
         // Can do this twice and 'compare results with other saved pointermaps', but so far the 3 top level ones are always valid and there's no need.
         private static readonly int TODOffset = 0x138;
-        private static readonly int TODPointer = 0x02E67A60;
+        private static readonly int TODPointer = 0x02E88BE0;
 
         // Player location
         private static string PatternPlayerCoords = "0F B6 5C 24 70 84 DB 75 43";
