@@ -6,8 +6,6 @@ using ConsoleHotKey;
 using System.Windows.Forms;
 using Reloaded.Memory.Sigscan;
 using Reloaded.Memory.Sources;
-using Reloaded.Memory.Pointers;
-using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using System.Numerics;
 
@@ -94,20 +92,24 @@ namespace SnowFlyer2
         [STAThread]
         static void Main(string[] args)
         {
+            KeybindingManager keybindingManager = new KeybindingManager();
+            KeybindingConfig config = keybindingManager.ReadKeybindingConfig();
+
             Process snowRunnerProcess = attachToSnowRunnerProcess();
-            HotKeyManager.RegisterHotKey(Keys.F1, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F2, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F3, KeyModifiers.Control);
-            HotKeyManager.RegisterHotKey(Keys.F4, KeyModifiers.Control);
-            HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, snowRunnerProcess);
+            HotKeyManager.RegisterHotKey(config.ToggleFlyMode, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(config.ToggleFreezeTime, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(config.ToggleTimeLapseMode, KeyModifiers.Control);
+            HotKeyManager.RegisterHotKey(config.GetPlayerLocation, KeyModifiers.Control);
+            HotKeyManager.HotKeyPressed += (sender2, e2) => Hotkey_Pressed(sender2, e2, config,snowRunnerProcess);
+
             bool showMenu = true;
             while (showMenu)
             {
-                showMenu = MainMenu(snowRunnerProcess);
+                showMenu = MainMenu(snowRunnerProcess, config);
             }
 
         }
-        private static bool MainMenu(Process snowRunnerProcess)
+        private static bool MainMenu(Process snowRunnerProcess, KeybindingConfig config)
         {
             string logo = @"   _____                     ______ _                   ___  
   / ____|                   |  ____| |                 |__ \ 
@@ -123,7 +125,7 @@ namespace SnowFlyer2
 
 
 
-            DisplayHotkeyInstructions();
+            DisplayHotkeyInstructions(config);
             
             //Prevent app from closing
             Console.ReadKey();
@@ -439,13 +441,13 @@ namespace SnowFlyer2
             return (IntPtr)valueAddress;
         }
 
-        private static void DisplayHotkeyInstructions()
+        private static void DisplayHotkeyInstructions(KeybindingConfig config)
         {
             Console.WriteLine("\n \nHotkeys: \n");
-            Console.WriteLine("Ctrl + F1: \t Toggle free camera mode\n");
-            Console.WriteLine("Ctrl + F2: \t Toggle in-game time\n");
-            Console.WriteLine("Ctrl + F3: \t Toggle timelapse\n");
-            Console.WriteLine("Ctrl + F4: \t Get player location\n");
+            Console.WriteLine("Ctrl + "+ config.ToggleFlyMode +": \t Toggle free camera mode\n");
+            Console.WriteLine("Ctrl + "+ config.ToggleFreezeTime +": \t Toggle in-game time\n");
+            Console.WriteLine("Ctrl + "+ config.ToggleTimeLapseMode +": \t Toggle timelapse\n");
+            Console.WriteLine("Ctrl + "+ config.GetPlayerLocation +": \t Get player location\n");
         }
 
         private static void ConsoleLogWithColour(string content, ConsoleColor foreground, ConsoleColor background)
@@ -456,72 +458,63 @@ namespace SnowFlyer2
             Console.ResetColor();
         }
 
-        private static void Hotkey_Pressed(object sender2, HotKeyEventArgs e2, Process snowRunnerProcess)
+        private static void Hotkey_Pressed(object sender2, HotKeyEventArgs e2, KeybindingConfig config, Process snowRunnerProcess)
         {
             Console.Clear();
 
-            switch (e2.Key)
+            if (e2.Key == config.ToggleFlyMode)
             {
-                case Keys.F1:
-                    {
-                        Console.WriteLine("Toggling freecam...");
-                        if (IsFreeCamActive)
-                        {
-                            DisableFreeCam(snowRunnerProcess);
-                        }
-                        else
-                        {
-                            // Try disabling in case someone quits while in fly mode and then can't revert
-                            DisableFreeCam(snowRunnerProcess);
-                            EnableFreeCam(snowRunnerProcess);
-                        }
-                        break;
-                    }
-                case Keys.F2:
-                    {
-                        // Toggle the game's regular passing of time
-                        if (IsTimePassing)
-                        {
-                            Console.WriteLine("Disabling timer...");
-                            StopTODTicker(snowRunnerProcess);
-                        }
-                        else
-                        {
-                            // Try disabling in case someone quits while time is stopped and then can't revert
-                            Console.WriteLine("Check timer was running...");
-                            StopTODTicker(snowRunnerProcess);
-                            Console.WriteLine("Resuming timer...");
-                            ResumeTODTicker(snowRunnerProcess);
-                        }
-                        break;
-                    }
-                case Keys.F3:
-                    {
-                        // Toggle TOD cycle
-                        if (ShouldLoopTime)
-                        {
-                            Console.WriteLine("Stopping timelapse");
-                            StopCyclingTOD(snowRunnerProcess);
-                        }
-                        else
-                        {
-                            Console.WriteLine("Starting timelapse");
-                            CycleTOD(snowRunnerProcess);
-                        }
-                        break;
-                    }
-                case Keys.F4:
-                    {
-                        GetPlayerCoords(snowRunnerProcess);
-                        break;
-                    }
-                default:
-                    {
-                        Console.WriteLine("Unknown hotkey!");
-                        break;
-                    }
+                Console.WriteLine("Toggling freecam...");
+                if (IsFreeCamActive)
+                {
+                    DisableFreeCam(snowRunnerProcess);
+                }
+                else
+                {
+                    // Try disabling in case someone quits while in fly mode and then can't revert
+                    DisableFreeCam(snowRunnerProcess);
+                    EnableFreeCam(snowRunnerProcess);
+                }
             }
-            DisplayHotkeyInstructions();
+            else if (e2.Key == config.ToggleFreezeTime)
+            {
+                if (IsTimePassing)
+                {
+                    Console.WriteLine("Disabling timer...");
+                    StopTODTicker(snowRunnerProcess);
+                }
+                else
+                {
+                    // Try disabling in case someone quits while time is stopped and then can't revert
+                    Console.WriteLine("Check timer was running...");
+                    StopTODTicker(snowRunnerProcess);
+                    Console.WriteLine("Resuming timer...");
+                    ResumeTODTicker(snowRunnerProcess);
+                }
+            }
+            else if (e2.Key == config.ToggleTimeLapseMode)
+            {
+                if (ShouldLoopTime)
+                {
+                    Console.WriteLine("Stopping timelapse");
+                    StopCyclingTOD(snowRunnerProcess);
+                }
+                else
+                {
+                    Console.WriteLine("Starting timelapse");
+                    CycleTOD(snowRunnerProcess);
+                }
+            }
+            else if (e2.Key == config.GetPlayerLocation)
+            {
+                GetPlayerCoords(snowRunnerProcess);
+            }
+            else
+            {
+                Console.WriteLine("Unknown hotkey!");
+            }
+
+            DisplayHotkeyInstructions(config);
         }
 
 

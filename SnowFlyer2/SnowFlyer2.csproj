@@ -53,6 +53,9 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="Reloaded.Memory, Version=4.1.3.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Reloaded.Memory.4.1.3\lib\netstandard2.0\Reloaded.Memory.dll</HintPath>
     </Reference>
@@ -84,6 +87,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ConsoleHotKey.cs" />
+    <Compile Include="HexConverter.cs" />
+    <Compile Include="KeybindingConfig.cs" />
+    <Compile Include="KeybindingManager.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
