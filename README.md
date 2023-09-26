@@ -8,3 +8,7 @@ Tested on version 24.0 (Season 10, British Colombia release),  Steam and Epic ve
 
 Simply unzip to a folder of your choice, then run Snowflyer2.
 When Snowrunner is running, follow the prompts to toggle free camera mode.
+
+## Config
+
+The mod creates a config file `keybinds.json` for power users to configure the hotkeys.
