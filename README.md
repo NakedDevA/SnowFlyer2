@@ -2,7 +2,7 @@
 
 A minimal trainer to enable free camera mode in Snowrunner
 
-Tested on version 31 (Rezvani Tank Update),  Steam and Epic versions.
+Tested on version 32 (Season 14 Update),  Steam and Epic versions.
 
 ## Usage
 
