@@ -49,7 +49,7 @@ namespace SnowFlyer2
         // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button and scanning for a 4 byte boolean.
         // There will be two - one is the highlight state of the free camera button, the other is the actual freecam state.
         // NB- this mod can't be tested on mod maps, since those already have devmode flag set they will become unable to use freecam when we swizzle the devmode check
-        private static readonly int FlyModeFlagOffset = 0x29FDAC4;
+        private static readonly int FlyModeFlagOffset = 0x29FCC64;
         private static readonly byte[] FlyModeOnPatch = { 0x01 };
         private static readonly byte[] FlyModeRevertPatch = { 0x00 };
 
@@ -80,7 +80,7 @@ namespace SnowFlyer2
         // ->'Pointerscan for this address' using the pointermap. Should be 3 top-level pointers available.
         // Can do this twice and 'compare results with other saved pointermaps', but so far the 3 top level ones are always valid and there's no need.
         private static readonly int TODOffset = 0x138;
-        private static readonly int TODPointer = 0x02A06FD8;
+        private static readonly int TODPointer = 0x02A06178;
 
         // Player location
         private static string PatternPlayerCoords = "0F B6 5C 24 70 84 DB 75 43";
