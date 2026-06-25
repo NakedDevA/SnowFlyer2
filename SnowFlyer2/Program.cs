@@ -49,7 +49,7 @@ namespace SnowFlyer2
         // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button and scanning for a 4 byte boolean.
         // There will be two - one is the highlight state of the free camera button, the other is the actual freecam state.
         // NB- this mod can't be tested on mod maps, since those already have devmode flag set they will become unable to use freecam when we swizzle the devmode check
-        private static readonly int FlyModeFlagOffset = 0x2A4E018;
+        private static readonly int FlyModeFlagOffset = 0x2A5438C;
         private static readonly byte[] FlyModeOnPatch = { 0x01 };
         private static readonly byte[] FlyModeRevertPatch = { 0x00 };
 
@@ -68,19 +68,19 @@ namespace SnowFlyer2
         private static readonly string FlyModeCheckRevertPatternB = "83 3D CD 3E 5C 02 01 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],01    0F    ON NEXT BYTE FOR UNIQUENESS
 
         // Time Of Day    
-        private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 38 01 00 00"; //movss[r13 + 00000138],xmm2   optional F3 0F ON NEXT BYTE FOR UNIQUENESS
+        private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 50 01 00 00"; //movss[r13 + 00000150],xmm2   optional F3 0F ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] TODTickDisablePatch = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 }; // 9 NOPS, prevent timer from advancing
 
         private static readonly string TODTickRevertPattern = "90 90 90 90 90 90 90 90 90 F3 0F 10 05"; //our NOPS, plus next instruction since there are definitely dupes of NOP 
-        private static readonly byte[] TODTickRevertPatch = { 0xF3, 0x41, 0x0F, 0x11, 0x95, 0x38, 0x01, 0x00, 0x00 }; //original ticker code
+        private static readonly byte[] TODTickRevertPatch = { 0xF3, 0x41, 0x0F, 0x11, 0x95, 0x50, 0x01, 0x00, 0x00 }; //original ticker code
 
-        // To find the TOD pointer - use Cheat Engine with above TODTickDisablePattern, which should be editing one address (r13+ 000000138).
+        // To find the TOD pointer - use Cheat Engine with above TODTickDisablePattern, which should be editing one address (r13+ 000000150).
         // Memory view-> search for AOB, go to same address in the ASM section at top, ->'find out what addresses this instruction accesses'
-        // Add it to addresslist, ->generate pointermap for it with offsets ending in 138 as below
+        // Add it to addresslist, ->generate pointermap for it with offsets ending in 150 as below
         // ->'Pointerscan for this address' using the pointermap. Should be 3 top-level pointers available.
         // Can do this twice and 'compare results with other saved pointermaps', but so far the 3 top level ones are always valid and there's no need.
-        private static readonly int TODOffset = 0x138;
-        private static readonly int TODPointer = 0x02A87678;
+        private static readonly int TODOffset = 0x150;
+        private static readonly int TODPointer = 0x02A5D9B0; 
 
         // Player location
         private static string PatternPlayerCoords = "0F B6 5C 24 70 84 DB 75 43";
