@@ -60,20 +60,21 @@ namespace SnowFlyer2
         private static IntPtr FlyModeFlagAddress = IntPtr.Zero;
         private static int FlyModeFlagProcessId = -1;
 
-        // Time Of Day    
-        private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 50 01 00 00"; //movss[r13 + 00000150],xmm2   optional F3 0F ON NEXT BYTE FOR UNIQUENESS
+        // Time Of Day
+        private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 ?? ?? ?? ?? F3 0F 10 05";
         private static readonly byte[] TODTickDisablePatch = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 }; // 9 NOPS, prevent timer from advancing
 
         private static readonly string TODTickRevertPattern = "90 90 90 90 90 90 90 90 90 F3 0F 10 05"; //our NOPS, plus next instruction since there are definitely dupes of NOP 
-        private static readonly byte[] TODTickRevertPatch = { 0xF3, 0x41, 0x0F, 0x11, 0x95, 0x50, 0x01, 0x00, 0x00 }; //original ticker code
-
-        // To find the TOD pointer - use Cheat Engine with above TODTickDisablePattern, which should be editing one address (r13+ 000000150).
-        // Memory view-> search for AOB, go to same address in the ASM section at top, ->'find out what addresses this instruction accesses'
-        // Add it to addresslist, ->generate pointermap for it with offsets ending in 150 as below
-        // ->'Pointerscan for this address' using the pointermap. Should be 3 top-level pointers available.
-        // Can do this twice and 'compare results with other saved pointermaps', but so far the 3 top level ones are always valid and there's no need.
-        private static readonly int TODOffset = 0x150;
-        private static readonly int TODPointer = 0x2A8EB48; 
+        private static readonly string TODFieldReferencePattern = "F3 41 0F 11 95 ?? ?? ?? ?? 45 32 F6";
+        private static readonly string TODAccessorCallPattern = "E8 ?? ?? ?? ?? 48 8B F8 48 8D 8B ?? ?? ?? ?? B8 ?? ?? ?? ?? 48 85 DB 48 0F 44 C8 C6 44 24 28 01 48 89 4C 24 20 41 0F 28 D8 0F 28 D7 48 8B D6 48 8B 0F E8 ?? ?? ?? ??";
+        private const int TODTickInstructionLength = 9;
+        private const int TODFieldDisplacementOffset = 5;
+        private const int TODUpdateCallOffset = 0x32;
+        private static byte[] TODTickOriginalBytes;
+        private static IntPtr TODOwnerPointerAddress = IntPtr.Zero;
+        private static IntPtr TODTickInstructionAddress = IntPtr.Zero;
+        private static int TODFieldOffset;
+        private static int TODProcessId = -1;
 
         // Player location
         private static string PatternPlayerCoords = "0F B6 5C 24 70 84 DB 75 43";
@@ -128,9 +129,11 @@ namespace SnowFlyer2
         private static void StopTODTicker(Process snowRunnerProcess)
         {
             ShouldLoopTime = false;
-            var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
+                // cache the live pointer and original instruction before noping
+                GetTODMemoryAddress(snowRunnerProcess, new ExternalMemory(snowRunnerProcess));
+                var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
                 SearchAndApplyPatch(snowRunnerProcess, scanner, TODTickDisablePattern, TODTickDisablePatch, "TODTick");
 
                 Console.BackgroundColor = ConsoleColor.Blue;
@@ -152,10 +155,11 @@ namespace SnowFlyer2
         private static void ResumeTODTicker(Process snowRunnerProcess)
         {
             ShouldLoopTime = false;
-            var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
-                SearchAndApplyPatch(snowRunnerProcess, scanner, TODTickRevertPattern, TODTickRevertPatch, "TODTick");
+                ResolveTODMemoryLayout(snowRunnerProcess, new ExternalMemory(snowRunnerProcess));
+                var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
+                SearchAndApplyPatch(snowRunnerProcess, scanner, TODTickRevertPattern, TODTickOriginalBytes, "TODTick");
 
                 Console.BackgroundColor = ConsoleColor.Blue;
                 Console.ForegroundColor = ConsoleColor.White;
@@ -319,7 +323,7 @@ namespace SnowFlyer2
                 }
                 catch (Exception)
                 {
-                    throw new Exception(String.Format("Patching in memory failed for {0} \n Try running again as Administrator", label));
+                    throw new Exception(String.Format("Patching in memory failed for {0} \n ", label));
                 }
 
             }
@@ -438,7 +442,7 @@ namespace SnowFlyer2
             }
             catch (Exception ex)
             {
-                throw new Exception(String.Format("Updating the FlyMode flag failed: {0}\nTry running again as Administrator", ex.Message));
+                throw new Exception(String.Format("Updating the FlyMode flag failed: {0}\n", ex.Message));
             }
         }
 
@@ -456,7 +460,7 @@ namespace SnowFlyer2
             }
             catch (Exception)
             {
-                throw new Exception(String.Format("Could not read current time from memory\n Try running again as Administrator"));
+                throw new Exception(String.Format("Could not read current time from memory\n"));
             }
         }
 
@@ -519,16 +523,127 @@ namespace SnowFlyer2
 
         private static IntPtr GetTODMemoryAddress(Process snowRunnerProcess, ExternalMemory memory)
         {
-            var baseAddress = snowRunnerProcess.MainModule.BaseAddress + TODPointer;
-            byte[] readBytes;
-            memory.ReadRaw(baseAddress, out readBytes, 8);
+            ResolveTODMemoryLayout(snowRunnerProcess, memory);
 
-            var addressInPointer = BitConverter.ToInt64(readBytes, 0);
+            var ownerAddress = memory.Read<IntPtr>(TODOwnerPointerAddress);
+            if (ownerAddress == IntPtr.Zero)
+            {
+                throw new Exception("The time-of-day owner is not available; load into a map and try again");
+            }
 
-            //This gives us 1E19DACD310, which is the right address pre-offset!!
-            // So check the value there:
-            var valueAddress = addressInPointer + TODOffset;
-            return (IntPtr)valueAddress;
+            var valueAddress = ownerAddress + TODFieldOffset;
+            var currentValue = memory.Read<float>(valueAddress);
+            if (float.IsNaN(currentValue) || float.IsInfinity(currentValue) || currentValue < 0f || currentValue > 24f)
+            {
+                throw new Exception(String.Format("Resolved time-of-day value was outside the expected range: {0}", currentValue));
+            }
+
+            return valueAddress;
+        }
+
+        private static void ResolveTODMemoryLayout(Process snowRunnerProcess, ExternalMemory memory)
+        {
+            if (TODOwnerPointerAddress != IntPtr.Zero && TODProcessId == snowRunnerProcess.Id)
+            {
+                return;
+            }
+
+            Console.WriteLine("Searching for time-of-day memory references");
+
+            var module = snowRunnerProcess.MainModule;
+            var scanner = new Scanner(snowRunnerProcess, module);
+            var activeTick = scanner.CompiledFindPattern(TODTickDisablePattern);
+
+            IntPtr tickInstructionAddress;
+            if (activeTick.Found)
+            {
+                tickInstructionAddress = FindUniquePatternAddress(scanner, module, TODTickDisablePattern, "active TOD tick");
+                memory.ReadRaw(tickInstructionAddress, out TODTickOriginalBytes, TODTickInstructionLength);
+            }
+            else
+            {
+                // If SnowFlyer was restarted while the game was frozen, the first store is
+                // already NOPed. A second store in the same routine supplies identical original
+                // instruction bytes, including the current field displacement.
+                tickInstructionAddress = FindUniquePatternAddress(scanner, module, TODTickRevertPattern, "disabled TOD tick");
+                var fieldReferenceAddress = FindUniquePatternAddress(scanner, module, TODFieldReferencePattern, "TOD field reference");
+                memory.ReadRaw(fieldReferenceAddress, out TODTickOriginalBytes, TODTickInstructionLength);
+            }
+
+            TODFieldOffset = BitConverter.ToInt32(TODTickOriginalBytes, TODFieldDisplacementOffset);
+            if (TODFieldOffset <= 0 || TODFieldOffset > 0x10000)
+            {
+                throw new Exception(String.Format("Resolved an invalid time-of-day field offset: {0:X}", TODFieldOffset));
+            }
+
+            var callSiteAddress = FindUniquePatternAddress(scanner, module, TODAccessorCallPattern, "TOD owner accessor call");
+            var updateFunctionAddress = ReadOffsetFromOpcode(memory, callSiteAddress + TODUpdateCallOffset, 1);
+            var tickDistance = tickInstructionAddress.ToInt64() - updateFunctionAddress.ToInt64();
+            if (tickDistance < 0 || tickDistance > 0x10000)
+            {
+                throw new Exception("The resolved TOD call site did not target the routine containing the tick instruction");
+            }
+
+            var accessorAddress = ReadOffsetFromOpcode(memory, callSiteAddress, 1);
+            byte[] accessorBytes;
+            memory.ReadRaw(accessorAddress, out accessorBytes, 8);
+            if (accessorBytes[0] != 0x48 || accessorBytes[1] != 0x8D || accessorBytes[2] != 0x05 || accessorBytes[7] != 0xC3)
+            {
+                throw new Exception("The resolved TOD owner accessor did not have the expected LEA/RET form");
+            }
+
+            var ownerPointerAddress = ReadOffsetFromOpcode(memory, accessorAddress, 3);
+            var moduleStart = module.BaseAddress.ToInt64();
+            var moduleEnd = moduleStart + module.ModuleMemorySize;
+            if (ownerPointerAddress.ToInt64() < moduleStart || ownerPointerAddress.ToInt64() > moduleEnd - IntPtr.Size)
+            {
+                throw new Exception("The resolved TOD owner pointer was outside SnowRunner.exe");
+            }
+
+            TODOwnerPointerAddress = ownerPointerAddress;
+            TODTickInstructionAddress = tickInstructionAddress;
+            TODProcessId = snowRunnerProcess.Id;
+
+            Console.WriteLine(
+                "Found TOD owner pointer at SnowRunner.exe+{0:X}, field offset +{1:X}, tick at +{2:X}",
+                TODOwnerPointerAddress.ToInt64() - moduleStart,
+                TODFieldOffset,
+                TODTickInstructionAddress.ToInt64() - moduleStart);
+        }
+
+        private static IntPtr FindUniquePatternAddress(Scanner scanner, ProcessModule module, string pattern, string label)
+        {
+            var compiledPattern = new CompiledScanPattern(pattern);
+            var firstMatch = scanner.CompiledFindPattern(compiledPattern, 0);
+            if (!firstMatch.Found)
+            {
+                throw new Exception(String.Format("Could not find {0}", label));
+            }
+
+            if (firstMatch.Offset + 1 < module.ModuleMemorySize)
+            {
+                var secondMatch = scanner.CompiledFindPattern(compiledPattern, firstMatch.Offset + 1);
+                if (secondMatch.Found)
+                {
+                    throw new Exception(String.Format("Could not uniquely find {0}", label));
+                }
+            }
+
+            return module.BaseAddress + firstMatch.Offset;
+        }
+
+        private static bool IsTODTickerRunning(Process snowRunnerProcess)
+        {
+            var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
+            var activeTickFound = scanner.CompiledFindPattern(TODTickDisablePattern).Found;
+            var disabledTickFound = scanner.CompiledFindPattern(TODTickRevertPattern).Found;
+
+            if (activeTickFound == disabledTickFound)
+            {
+                throw new Exception("Could not determine whether the time-of-day ticker is running");
+            }
+
+            return activeTickFound;
         }
 
         private static void DisplayHotkeyInstructions(KeybindingConfig config)
@@ -568,18 +683,25 @@ namespace SnowFlyer2
             }
             else if (e2.Key == config.ToggleFreezeTime)
             {
-                if (IsTimePassing)
+                try
                 {
-                    Console.WriteLine("Disabling timer...");
-                    StopTODTicker(snowRunnerProcess);
+                    // Read the actual patch state so restarting SnowFlyer while time is frozen
+                    // does not leave the local state out of sync with the game.
+                    IsTimePassing = IsTODTickerRunning(snowRunnerProcess);
+                    if (IsTimePassing)
+                    {
+                        Console.WriteLine("Disabling timer...");
+                        StopTODTicker(snowRunnerProcess);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Resuming timer...");
+                        ResumeTODTicker(snowRunnerProcess);
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    // Try disabling in case someone quits while time is stopped and then can't revert
-                    Console.WriteLine("Check timer was running...");
-                    StopTODTicker(snowRunnerProcess);
-                    Console.WriteLine("Resuming timer...");
-                    ResumeTODTicker(snowRunnerProcess);
+                    Console.WriteLine(ex.Message);
                 }
             }
             else if (e2.Key == config.ToggleTimeLapseMode)
