@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using ConsoleHotKey;
 using System.Windows.Forms;
 using Reloaded.Memory.Sigscan;
+using Reloaded.Memory.Sigscan.Structs;
 using Reloaded.Memory.Sources;
 using System.Threading.Tasks;
 using System.Numerics;
@@ -46,26 +48,17 @@ namespace SnowFlyer2
         private static readonly string DevCheckRevertPatternB = "80 B8 C8 00 00 00 01 0F 85"; //cmp byte ptr [rax+000000C8],01   0F 85 ON NEXT BYTE FOR UNIQUENESS
         private static readonly byte[] DevCheckRevertPatchB = { 0x80, 0xB8, 0xC8, 0x00, 0x00, 0x00, 0X00 }; //cmp byte ptr [rax+000000C8],00
 
-        // To find the fly mode offset after patches, use Cheat Engine in a mod map, toggling the free camera button and scanning for a 4 byte boolean.
-        // There will be two - one is the highlight state of the free camera button, the other is the actual freecam state.
-        // NB- this mod can't be tested on mod maps, since those already have devmode flag set they will become unable to use freecam when we swizzle the devmode check
-        private static readonly int FlyModeFlagOffset = 0x2A5412C;
-        private static readonly byte[] FlyModeOnPatch = { 0x01 };
-        private static readonly byte[] FlyModeRevertPatch = { 0x00 };
-
-        // The following are intended to patch the flymode *check* rather than change the value, which would be more resilient to game patches.
-        // Not yet working as intended, and the fly mode flag address is trivial to find again so this isn't a priority to fix
-        private static readonly string FlyModeCheckPatternA = "83 3D C7 63 59 02 00 48"; //cmp dword ptr[SnowRunner.exe + 2E24D74],00  48 ON NEXT BYTE FOR UNIQUENESS
-        private static readonly byte[] FlyModeCheckPatchA = { 0x83, 0x3D, 0xC7, 0x63, 0x59, 0x02, 0X01 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],01
-
-        private static readonly string FlyModeCheckRevertPatternA = "83 3D C7 63 59 02 01 48"; //cmp dword ptr[SnowRunner.exe + 2E24D74],01  48 ON NEXT BYTE FOR UNIQUENESS
-        private static readonly byte[] FlyModeCheckRevertPatchA = { 0x83, 0x3D, 0xC7, 0x63, 0x59, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
-
-        private static readonly string FlyModeCheckPatternB = "83 3D CD 3E 5C 02 00 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],00    0F    ON NEXT BYTE FOR UNIQUENESS
-        private static readonly byte[] FlyModeCheckPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X01 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],01
-
-        private static readonly byte[] FlyModeCheckRevertPatchB = { 0x83, 0x3D, 0xCD, 0x3E, 0x5C, 0x02, 0X00 }; //cmp dword ptr[SnowRunner.exe + 2E24D74],00
-        private static readonly string FlyModeCheckRevertPatternB = "83 3D CD 3E 5C 02 01 0F"; //cmp dword ptr [SnowRunner.exe+2E24D74],01    0F    ON NEXT BYTE FOR UNIQUENESS
+        // The fly mode flag is referenced by two RIP-relative CMP instructions, four-byte
+        // displacement changes with patches
+        private static readonly string[] FlyModeFlagReferencePatterns =
+        {
+            "83 3D ?? ?? ?? ?? 00 48 8B F9 0F 85 ?? ?? ?? ?? 48 8B 41 28 49 89 5B 08 4D 89 73 18",
+            "83 3D ?? ?? ?? ?? 00 0F 84 ?? ?? ?? ?? F3 44 0F 10 4E 28 F3 44 0F 10 56 18 F3 44 0F 10 5E 08"
+        };
+        private const int FlyModeFlagReferenceLength = 7;
+        private const int FlyModeFlagDisplacementOffset = 2;
+        private static IntPtr FlyModeFlagAddress = IntPtr.Zero;
+        private static int FlyModeFlagProcessId = -1;
 
         // Time Of Day    
         private static readonly string TODTickDisablePattern = "F3 41 0F 11 95 50 01 00 00"; //movss[r13 + 00000150],xmm2   optional F3 0F ON NEXT BYTE FOR UNIQUENESS
@@ -257,9 +250,10 @@ namespace SnowFlyer2
             var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
+                var flyModeFlagAddress = GetFlyModeFlagAddress(snowRunnerProcess);
                 SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckPattern, DevCheckPatch, "DevMode");
                 SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckPatternB, DevCheckPatchB, "DevModeB");
-                ForceApplyPatchAtOffset(snowRunnerProcess, FlyModeFlagOffset, FlyModeOnPatch, "FlyMode");
+                SetFlyModeFlag(snowRunnerProcess, flyModeFlagAddress, true);
 
                 Console.BackgroundColor = ConsoleColor.Blue;
                 Console.ForegroundColor = ConsoleColor.White;
@@ -278,9 +272,10 @@ namespace SnowFlyer2
             var scanner = new Scanner(snowRunnerProcess, snowRunnerProcess.MainModule);
             try
             {
+                var flyModeFlagAddress = GetFlyModeFlagAddress(snowRunnerProcess);
                 SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckRevertPattern, DevCheckRevertPatch, "DevMode");
                 SearchAndApplyPatch(snowRunnerProcess, scanner, DevCheckRevertPatternB, DevCheckRevertPatchB, "DevModeB");
-                ForceApplyPatchAtOffset(snowRunnerProcess, FlyModeFlagOffset, FlyModeRevertPatch, "FlyMode");
+                SetFlyModeFlag(snowRunnerProcess, flyModeFlagAddress, false);
 
                 Console.BackgroundColor = ConsoleColor.Blue;
                 Console.ForegroundColor = ConsoleColor.White;
@@ -335,20 +330,115 @@ namespace SnowFlyer2
         }
 
 
-        private static void ForceApplyPatchAtOffset(Process snowRunnerProcess, int offset, byte[] patchBytes, String label)
+        private static IntPtr GetFlyModeFlagAddress(Process snowRunnerProcess)
         {
-            Console.WriteLine("Using known {0} patch location {1:X}. Patching game in memory...", label, offset);
+            if (FlyModeFlagAddress != IntPtr.Zero && FlyModeFlagProcessId == snowRunnerProcess.Id)
+            {
+                return FlyModeFlagAddress;
+            }
+
+            Console.WriteLine("Searching for FlyMode flag references");
+
+            var module = snowRunnerProcess.MainModule;
+            var scanner = new Scanner(snowRunnerProcess, module);
+            var memory = new ExternalMemory(snowRunnerProcess);
+            HashSet<long> sharedTargets = null;
+
+            foreach (var pattern in FlyModeFlagReferencePatterns)
+            {
+                var targets = FindRipRelativeTargets(scanner, memory, module, pattern);
+                if (targets.Count == 0)
+                {
+                    throw new Exception(String.Format("Could not find a FlyMode flag reference matching {0}", pattern));
+                }
+
+                if (sharedTargets == null)
+                {
+                    sharedTargets = targets;
+                }
+                else
+                {
+                    sharedTargets.IntersectWith(targets);
+                }
+            }
+
+            if (sharedTargets == null || sharedTargets.Count != 1)
+            {
+                var candidateCount = sharedTargets == null ? 0 : sharedTargets.Count;
+                throw new Exception(String.Format("Could not uniquely resolve the FlyMode flag ({0} shared candidates)", candidateCount));
+            }
+
+            var resolvedAddress = new IntPtr(sharedTargets.Single());
+            var currentValue = memory.Read<int>(resolvedAddress);
+            if (currentValue != 0 && currentValue != 1)
+            {
+                throw new Exception(String.Format("Resolved FlyMode flag contained unexpected value {0}", currentValue));
+            }
+
+            FlyModeFlagAddress = resolvedAddress;
+            FlyModeFlagProcessId = snowRunnerProcess.Id;
+
+            var relativeAddress = resolvedAddress.ToInt64() - module.BaseAddress.ToInt64();
+            Console.WriteLine("Found FlyMode flag at SnowRunner.exe+{0:X}", relativeAddress);
+            return resolvedAddress;
+        }
+
+        private static HashSet<long> FindRipRelativeTargets(Scanner scanner, ExternalMemory memory, ProcessModule module, string pattern)
+        {
+            var targets = new HashSet<long>();
+            var compiledPattern = new CompiledScanPattern(pattern);
+            var startingIndex = 0;
+            var moduleStart = module.BaseAddress.ToInt64();
+            var moduleEnd = moduleStart + module.ModuleMemorySize;
+
+            while (startingIndex < module.ModuleMemorySize)
+            {
+                var match = scanner.CompiledFindPattern(compiledPattern, startingIndex);
+                if (!match.Found)
+                {
+                    break;
+                }
+
+                var instructionAddress = module.BaseAddress + match.Offset;
+                var displacement = memory.Read<int>(instructionAddress + FlyModeFlagDisplacementOffset);
+                var targetAddress = instructionAddress.ToInt64() + FlyModeFlagReferenceLength + displacement;
+
+                if (targetAddress >= moduleStart && targetAddress <= moduleEnd - sizeof(int))
+                {
+                    targets.Add(targetAddress);
+                }
+
+                startingIndex = match.Offset + 1;
+            }
+
+            return targets;
+        }
+
+        private static void SetFlyModeFlag(Process snowRunnerProcess, IntPtr flagAddress, bool enabled)
+        {
+            Console.WriteLine("Setting FlyMode flag to {0}", enabled ? "on" : "off");
             try
             {
                 var memory = new ExternalMemory(snowRunnerProcess);
-                var baseAddress = snowRunnerProcess.MainModule.BaseAddress + offset;
-                memory.WriteRaw(baseAddress, patchBytes);
+                var currentValue = memory.Read<int>(flagAddress);
+                if (currentValue != 0 && currentValue != 1)
+                {
+                    throw new Exception(String.Format("FlyMode flag contained unexpected value {0}", currentValue));
+                }
 
-                Console.WriteLine("Patch in memory successful!");
+                var newValue = enabled ? 1 : 0;
+                memory.Write<int>(flagAddress, newValue);
+
+                if (memory.Read<int>(flagAddress) != newValue)
+                {
+                    throw new Exception("FlyMode flag verification failed");
+                }
+
+                Console.WriteLine("FlyMode flag updated successfully!");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                throw new Exception(String.Format("Patching in memory failed for {0} \n Try running again as Administrator", label));
+                throw new Exception(String.Format("Updating the FlyMode flag failed: {0}\nTry running again as Administrator", ex.Message));
             }
         }
 
